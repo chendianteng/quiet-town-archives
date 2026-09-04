@@ -193,6 +193,21 @@
   const topActions=document.querySelector('.top-actions');
   const helpButton=document.getElementById('helpBtn');
   const resetButton=document.getElementById('resetBtn');
+  const originalResetHandler=resetButton.onclick;
+  if(originalResetHandler){
+    resetButton.onclick=function(event){
+      let confirmed=false;
+      const originalConfirm=window.confirm;
+      window.confirm=(...args)=>{
+        const result=originalConfirm(...args);
+        if(result) confirmed=true;
+        return result;
+      };
+      try{originalResetHandler.call(this,event)}
+      finally{window.confirm=originalConfirm}
+      if(confirmed) window.quietTownAnalytics.capture('game_restart');
+    };
+  }
   const menuPanel=document.createElement('div');
   menuPanel.className='case-menu-panel';
   menuPanel.id='caseMenuPanel';

@@ -18,6 +18,7 @@ body.case-playing>header{display:none!important}
         defaults: '2026-05-30',
         person_profiles: 'identified_only', // or 'always' to create profiles for anonymous users as well
     })
+    posthog.register({game_id:'quiet-town',game_name:'Quiet Town'});
 </script>
 </head>
 <body><header><div><b>静谧小镇档案</b><span id="subtitle"></span></div><div class="header-controls"><button class="soft" id="langBtn">EN</button><button class="soft" id="home" hidden>返回案件列表</button></div></header><main id="library"><section class="chapter"><div class="chapter-head"><div><h2>序章：初到静谧小镇</h2><p>两件看似普通的小事，留下了相同的印章。</p></div><span class="progress" id="p0">0/2</span></div><div class="story">作为新来的档案调查员，你首先接手植物店与裁缝店的异常报告。两案都可以独立解释，但旧记录上出现了来源不明的淡蓝色圆形印章。</div><div class="cards"><article class="card" data-card="1"><div class="case-line"><span>CASE 01</span><span class="stars">★☆☆☆☆</span></div><h3>消失的银叶草</h3><p>窗边的银叶草去了哪里？</p><div class="tags"><span>环境推理</span><span class="status" id="status1">未开始</span></div><button data-open="1">开始调查</button></article><article class="card" data-card="2"><div class="case-line"><span>CASE 02</span><span class="stars">★★☆☆☆</span></div><h3>凌晨亮起的裁缝店</h3><p>凌晨工作灯为何自行亮起？</p><div class="tags"><span>设备关联</span><span class="status" id="status2">未开始</span></div><button data-open="2">开始调查</button></article></div></section><section class="chapter"><div class="chapter-head"><div><h2>第一章：平静表象之下</h2><p>被改动的时间、缺失的交接与废弃的河运编号。</p></div><span class="progress" id="p1">0/4</span></div><div class="story">档案室开始收到无法归类的新报告。邮局、钟楼、面包房与旧渡口之间本应毫无关系，却反复出现同一枚淡蓝色圆章和 R-07 编号。</div><div class="cards"><article class="card locked" data-card="3"><div class="case-line"><span>CASE 03</span><span class="stars">★★☆☆☆</span></div><h3>没有寄出的信</h3><p>一封已经登记并盖邮戳的信没有离开小镇。请查明信件在哪里，以及为什么被抽出。</p><div class="tags"><span>流程记录</span><span class="status" id="status3">未解锁</span></div><button data-open="3">尚未解锁</button></article><article class="card locked" data-card="4"><div class="case-line"><span>CASE 04</span><span class="stars">★★★☆☆</span></div><h3>提前响起的钟</h3><p>居民在晚上 8:40 听见九下钟声，但钟楼机械记录正常。请查明声音来源和提前响起的原因。</p><div class="tags"><span>时间线</span><span class="status" id="status4">未解锁</span></div><button data-open="4">尚未解锁</button></article><article class="card locked" data-card="5"><div class="case-line"><span>CASE 05</span><span class="stars">★★★☆☆</span></div><h3>面包房的空架</h3><p>开门前，一整架刚出炉的面包不见了。请查明面包去了哪里，以及为什么没有销售记录。</p><div class="tags"><span>数量推理</span><span class="status" id="status5">未解锁</span></div><button data-open="5">尚未解锁</button></article><article class="card locked" data-card="6"><div class="case-line"><span>CASE 06</span><span class="stars">★★★★☆</span></div><h3>河边熄灭的灯</h3><p>旧渡口信号灯连续三晚在同一时间熄灭，第四晚出现一艘无人小船。请解释熄灯、小船和前几案异常之间的关系。</p><div class="tags"><span>综合推理</span><span class="status" id="status6">未解锁</span></div><button data-open="6">尚未解锁</button></article></div><section id="clueBoard"><h3>章节线索板</h3><ul id="chapterClues"><li>完成第一章案件后，贯穿线索会记录在这里。</li></ul></section></section></main>
@@ -129,7 +130,8 @@ body.case-playing>header{display:none!important}
   const allowedAnalytics={
     evidence_select:{selected_count:'integer'},
     conclusion_submit:{is_correct:'boolean',attempt_number:'positiveInteger'},
-    case_complete:{attempt_count:'positiveInteger'}
+    case_complete:{attempt_count:'positiveInteger'},
+    game_restart:{}
   };
   let play=null;
 
@@ -146,7 +148,7 @@ body.case-playing>header{display:none!important}
   function activeSeconds(){
     return Math.max(0,Math.floor(activeMilliseconds()/1000));
   }
-  function startPlay(caseId){
+  function startPlay(caseId,captureCaseOpen=true){
     play={
       caseId,
       accumulatedMs:0,
@@ -155,7 +157,8 @@ body.case-playing>header{display:none!important}
       completeEventCaptured:false,
       exited:false
     };
-    capture('case_open',{game_id:'quiet-town',case_id:caseId,language:language()});
+    if(captureCaseOpen) capture('case_open',{game_id:'quiet-town',case_id:caseId,language:language()});
+    capture('game_start',{game_id:'quiet-town',case_id:caseId,language:language()});
   }
   function finishPlay(){
     if(!play||play.exited) return;
@@ -165,6 +168,13 @@ body.case-playing>header{display:none!important}
     }
     play.exited=true;
     capture('case_exit',{
+      game_id:'quiet-town',
+      case_id:play.caseId,
+      active_seconds:activeSeconds(),
+      completed:play.completed,
+      language:language()
+    });
+    capture('game_exit',{
       game_id:'quiet-town',
       case_id:play.caseId,
       active_seconds:activeSeconds(),
@@ -192,11 +202,19 @@ body.case-playing>header{display:none!important}
 
     const safeProperties={game_id:'quiet-town',case_id:play.caseId,language:language()};
     for(const key of Object.keys(fields)) safeProperties[key]=properties[key];
+    if(data.eventName==='game_restart'){
+      const caseId=play.caseId;
+      finishPlay();
+      capture('game_restart',{game_id:'quiet-town',case_id:caseId,language:language()});
+      startPlay(caseId,false);
+      return;
+    }
     if(data.eventName==='case_complete'){
       if(play.completeEventCaptured) return;
       play.completeEventCaptured=true;
       play.completed=true;
       safeProperties.active_seconds=activeSeconds();
+      capture('game_complete',{...safeProperties,result:'solved'});
     }
     capture(data.eventName,safeProperties);
   }
@@ -230,6 +248,7 @@ body.case-playing>header{display:none!important}
     originalHome();
   };
   addEventListener('pagehide',finishPlay);
+  capture('game_view',{game_id:'quiet-town',language:language()});
   capture('home_view',{game_id:'quiet-town',language:language()});
 })();
 </script>
