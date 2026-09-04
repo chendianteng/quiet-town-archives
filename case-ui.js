@@ -2,12 +2,20 @@
   'use strict';
 
   const caseHeaders={
-    1:{zh:'第 1 案 · 窗边消失的植物 · ★☆☆☆☆',en:'Case 1 · The Missing Window Plant · ★☆☆☆☆'},
-    2:{zh:'第 2 案 · 凌晨亮起的裁缝店 · ★★☆☆☆',en:'Case 2 · The Tailor Shop Lit at Midnight · ★★☆☆☆'},
-    3:{zh:'第 3 案 · 没有寄出的信 · ★★☆☆☆',en:'Case 3 · The Unsent Letter · ★★☆☆☆'},
-    4:{zh:'第 4 案 · 提前响起的钟 · ★★★☆☆',en:'Case 4 · The Early Chime · ★★★☆☆'},
-    5:{zh:'第 5 案 · 面包房的空架 · ★★★☆☆',en:'Case 5 · The Empty Bakery Rack · ★★★☆☆'},
-    6:{zh:'第 6 案 · 河边熄灭的灯 · ★★★★☆',en:'Case 6 · The Light That Went Out by the River · ★★★★☆'}
+    1:{zh:'第 1 案 · 窗边消失的植物 · 难度 ★☆☆☆☆',en:'Case 1 · The Missing Window Plant · Difficulty ★☆☆☆☆'},
+    2:{zh:'第 2 案 · 凌晨亮起的裁缝店 · 难度 ★★☆☆☆',en:'Case 2 · The Tailor Shop Lit at Midnight · Difficulty ★★☆☆☆'},
+    3:{zh:'第 3 案 · 没有寄出的信 · 难度 ★★☆☆☆',en:'Case 3 · The Unsent Letter · Difficulty ★★☆☆☆'},
+    4:{zh:'第 4 案 · 提前响起的钟 · 难度 ★★★☆☆',en:'Case 4 · The Early Chime · Difficulty ★★★☆☆'},
+    5:{zh:'第 5 案 · 面包房的空架 · 难度 ★★★☆☆',en:'Case 5 · The Empty Bakery Rack · Difficulty ★★★☆☆'},
+    6:{zh:'第 6 案 · 河边熄灭的灯 · 难度 ★★★★☆',en:'Case 6 · The Light That Went Out by the River · Difficulty ★★★★☆'}
+  };
+
+  const nextCases={
+    2:{zh:'CASE 02 · 凌晨亮起的裁缝店',en:'CASE 02 · The Tailor Shop Lit at Midnight'},
+    3:{zh:'CASE 03 · 没有寄出的信',en:'CASE 03 · The Unsent Letter'},
+    4:{zh:'CASE 04 · 提前响起的钟',en:'CASE 04 · The Early Chime'},
+    5:{zh:'CASE 05 · 面包房的空架',en:'CASE 05 · The Empty Bakery Rack'},
+    6:{zh:'CASE 06 · 河边熄灭的灯',en:'CASE 06 · The Light That Went Out by the River'}
   };
 
   const translations=[
@@ -108,6 +116,155 @@
   const caseId=match?Number(match[1]):null;
   if(!caseId) return;
 
+  let activeLang=localStorage.getItem('quietTownLang')||'zh';
+  let caseContext={caseId,canPrevious:false,canNext:false};
+  let completionContext={newlyUnlockedCaseId:null};
+
+  const sharedStyles=document.createElement('style');
+  sharedStyles.id='case-ui-shared-styles';
+  sharedStyles.textContent=`
+    .top{position:relative;min-height:58px;padding:0 4px;align-items:center;gap:14px}
+    .brand{min-width:0;flex:1 1 auto}
+    .brand h1{margin:0;font-size:28px;line-height:1.08;letter-spacing:-.04em}
+    .brand p{display:block;margin:4px 0 0;color:var(--muted);font-size:12px;line-height:1.3}
+    .top-actions{display:flex;align-items:center;gap:7px;flex:0 0 auto}
+    .case-menu-panel{display:flex;align-items:center;gap:7px}
+    .top-actions .soft{min-height:38px;border:1px solid #fff;background:#fff9edcc;border-radius:12px;padding:8px 11px;color:var(--ink);font-size:14px;font-weight:800;white-space:nowrap}
+    .top-actions .soft:hover:not(:disabled){background:#fffdf7}
+    .top-actions .soft:disabled{opacity:.42;cursor:not-allowed}
+    .case-more{display:none;font-size:18px;line-height:1;min-width:38px;padding-inline:8px!important}
+    .case-home-short{display:none}
+    .case-complete{max-height:calc(100dvh - 24px);overflow:auto}
+    .case-complete .success-intro{margin:0 auto 14px;padding:12px 16px;border:1px solid #b8ccb9;border-radius:15px;background:#e6f0e3;color:#365845}
+    .case-complete .success-intro h2{margin:0;font-size:clamp(25px,4vw,36px)}
+    .case-complete .success-intro p{margin:5px 0 0;color:#4e6658;font-weight:650}
+    .case-complete .case-solved-title{font-size:clamp(27px,4vw,38px);margin:8px 0}
+    .case-complete .seal{transform:rotate(-7deg);transform-origin:center}
+    dialog[open] .case-complete .seal{animation:quiet-stamp .42s cubic-bezier(.2,.8,.25,1) both}
+    @keyframes quiet-stamp{0%{opacity:0;transform:rotate(-10deg) scale(1.15)}100%{opacity:1;transform:rotate(-7deg) scale(1)}}
+    .case-complete .chapter-clue,.case-complete .archive-card,.case-complete .unlock-card{position:relative;margin:14px 0 0;padding:12px 14px;border:1px solid #c7d5c7;border-radius:14px;background:#e8efe3;text-align:left;color:#52655a;line-height:1.5}
+    .case-complete .reward-heading{display:block;margin-bottom:3px;color:#3e614c}
+    .case-complete .reward-plus{position:absolute;right:12px;top:10px;padding:2px 7px;border-radius:999px;background:#607f6b;color:#fff;font-size:11px;font-weight:900}
+    .case-complete .unlock-card{background:#f3ead8;border-color:#dacba9}
+    .case-complete .unlock-card[hidden]{display:none}
+    @media(max-width:850px){.brand p{display:block}}
+    @media(max-width:600px){
+      .app{padding:7px;gap:7px}
+      .top{display:grid;grid-template-columns:minmax(0,1fr) auto;min-height:58px;padding:0 1px;gap:7px}
+      .brand h1{font-size:19px;white-space:nowrap}
+      .brand p{font-size:10.5px;line-height:1.2;white-space:normal}
+      .top-actions{gap:5px}
+      .top-actions .soft{min-height:32px;border-radius:9px;padding:5px 8px;font-size:12px}
+      .case-more{display:inline-flex;align-items:center;justify-content:center}
+      .case-home-full{display:none}
+      .case-home-short{display:inline}
+      .case-menu-panel{display:none;position:absolute;z-index:60;right:0;top:calc(100% + 5px);width:min(230px,calc(100vw - 16px));padding:7px;border:1px solid #d8d1c2;border-radius:13px;background:#fffaf0;box-shadow:0 12px 30px #263e3833}
+      .top-actions.menu-open .case-menu-panel{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+      .case-menu-panel .soft{width:100%;min-height:38px}
+      .case-complete{padding:16px}
+      .case-complete .success-intro{margin-bottom:10px;padding:10px 12px}
+      .case-complete .dialog-actions{position:sticky;bottom:-16px;margin-inline:-16px;padding:10px 16px;background:linear-gradient(transparent,#fffaf0 28%)}
+    }
+    @media(prefers-reduced-motion:reduce){dialog[open] .case-complete .seal{animation:none}}
+  `;
+  document.head.append(sharedStyles);
+
+  function makeButton(id,className,label){
+    const button=document.createElement('button');
+    button.type='button';
+    button.id=id;
+    button.className=`soft ${className}`;
+    button.textContent=label;
+    return button;
+  }
+
+  const topActions=document.querySelector('.top-actions');
+  const helpButton=document.getElementById('helpBtn');
+  const resetButton=document.getElementById('resetBtn');
+  const menuPanel=document.createElement('div');
+  menuPanel.className='case-menu-panel';
+  menuPanel.id='caseMenuPanel';
+  const previousButton=makeButton('casePrevious','case-nav-button','上一案');
+  const nextButton=makeButton('caseNext','case-nav-button','下一案');
+  menuPanel.append(previousButton,nextButton,helpButton,resetButton);
+  const languageButton=makeButton('caseLanguage','case-primary-button','EN');
+  const homeButton=makeButton('caseHome','case-primary-button','');
+  homeButton.innerHTML='<span class="case-home-full">返回案件列表</span><span class="case-home-short">返回</span>';
+  const moreButton=makeButton('caseMore','case-more','•••');
+  moreButton.setAttribute('aria-controls','caseMenuPanel');
+  moreButton.setAttribute('aria-expanded','false');
+  topActions.replaceChildren(menuPanel,languageButton,homeButton,moreButton);
+
+  function sendParent(type){
+    if(parent===window){
+      if(type==='returnLibrary') location.href='index.html';
+      return;
+    }
+    parent.postMessage({type},'*');
+  }
+
+  previousButton.addEventListener('click',()=>sendParent('previousCase'));
+  nextButton.addEventListener('click',()=>sendParent('nextCase'));
+  homeButton.addEventListener('click',()=>sendParent('returnLibrary'));
+  languageButton.addEventListener('click',()=>{
+    const lang=activeLang==='zh'?'en':'zh';
+    localStorage.setItem('quietTownLang',lang);
+    window.postMessage({type:'setLanguage',lang},'*');
+    if(parent!==window) parent.postMessage({type:'setLanguage',lang},'*');
+  });
+  moreButton.addEventListener('click',event=>{
+    event.stopPropagation();
+    const open=topActions.classList.toggle('menu-open');
+    moreButton.setAttribute('aria-expanded',String(open));
+  });
+  menuPanel.addEventListener('click',()=>{
+    topActions.classList.remove('menu-open');
+    moreButton.setAttribute('aria-expanded','false');
+  });
+  document.addEventListener('click',event=>{
+    if(!topActions.contains(event.target)){
+      topActions.classList.remove('menu-open');
+      moreButton.setAttribute('aria-expanded','false');
+    }
+  });
+  document.addEventListener('keydown',event=>{
+    if(event.key==='Escape'){
+      topActions.classList.remove('menu-open');
+      moreButton.setAttribute('aria-expanded','false');
+    }
+  });
+
+  const completeBody=document.querySelector('.case-complete');
+  if(completeBody){
+    const intro=document.createElement('div');
+    intro.className='success-intro';
+    intro.innerHTML='<h2></h2><p></p>';
+    const seal=completeBody.querySelector('.seal');
+    completeBody.insertBefore(intro,seal);
+    const solvedTitle=seal?.nextElementSibling;
+    if(solvedTitle?.tagName==='H2') solvedTitle.classList.add('case-solved-title');
+
+    let reward=completeBody.querySelector('.chapter-clue');
+    if(reward){
+      reward.querySelector('b')?.classList.add('reward-heading');
+      const plus=document.createElement('span');
+      plus.className='reward-plus';
+      plus.textContent='+1';
+      reward.append(plus);
+    }else{
+      reward=document.createElement('div');
+      reward.className='archive-card';
+      const actions=completeBody.querySelector('.dialog-actions');
+      completeBody.insertBefore(reward,actions);
+    }
+
+    const unlockCard=document.createElement('div');
+    unlockCard.className='unlock-card';
+    unlockCard.hidden=true;
+    const actions=completeBody.querySelector('.dialog-actions');
+    completeBody.insertBefore(unlockCard,actions);
+  }
+
   function replaceMappedText(map){
     const nodes=[];
     for(const element of document.body.querySelectorAll('*')){
@@ -126,17 +283,63 @@
   }
 
   function syncCaseUI(nextLang){
-    const activeLang=nextLang||(localStorage.getItem('quietTownLang')||'zh');
+    activeLang=nextLang||(localStorage.getItem('quietTownLang')||'zh');
     const isEnglish=activeLang==='en';
     document.querySelector('.brand h1').textContent=isEnglish?'Quiet Town Archives':'静谧小镇档案';
     document.querySelector('.brand p').textContent=caseHeaders[caseId][isEnglish?'en':'zh'];
     document.documentElement.lang=isEnglish?'en':'zh-CN';
     document.title=isEnglish?'Quiet Town Archives':'静谧小镇档案';
     replaceMappedText(isEnglish?toEnglish:toChinese);
+    previousButton.textContent=isEnglish?'Previous Case':'上一案';
+    nextButton.textContent=isEnglish?'Next Case':'下一案';
+    helpButton.textContent=isEnglish?'How to Investigate':'调查说明';
+    resetButton.textContent=isEnglish?'Restart':'重新开始';
+    languageButton.textContent=isEnglish?'中文':'EN';
+    homeButton.innerHTML=isEnglish
+      ?'<span class="case-home-full">Back to Case List</span><span class="case-home-short">Back</span>'
+      :'<span class="case-home-full">返回案件列表</span><span class="case-home-short">返回</span>';
+    moreButton.setAttribute('aria-label',isEnglish?'More case controls':'更多案件操作');
+    menuPanel.setAttribute('aria-label',isEnglish?'Case controls':'案件操作');
+    previousButton.setAttribute('aria-label',isEnglish?'Previous Case':'上一案');
+    nextButton.setAttribute('aria-label',isEnglish?'Next Case':'下一案');
+
+    previousButton.disabled=!caseContext.canPrevious;
+    nextButton.disabled=!caseContext.canNext;
+
+    if(completeBody){
+      const intro=completeBody.querySelector('.success-intro');
+      intro.querySelector('h2').textContent=isEnglish?'✓ Correct Deduction!':'✓ 推理正确！';
+      intro.querySelector('p').textContent=isEnglish?'Congratulations — you solved the case.':'恭喜，你成功破解了这个案件。';
+      const solvedTitle=completeBody.querySelector('.case-solved-title');
+      if(solvedTitle) solvedTitle.textContent=isEnglish?'Case Solved':'案件已解决';
+      const chapterReward=completeBody.querySelector('.chapter-clue');
+      if(chapterReward?.querySelector('.reward-heading')) chapterReward.querySelector('.reward-heading').textContent=isEnglish?'Chapter Clue Recorded':'章节线索已记录';
+      const archiveReward=completeBody.querySelector('.archive-card');
+      if(archiveReward) archiveReward.innerHTML=`<strong class="reward-heading">${isEnglish?'Case File Archived':'案件记录已归档'}</strong>`;
+      const unlockCard=completeBody.querySelector('.unlock-card');
+      const unlockedId=completionContext.newlyUnlockedCaseId;
+      unlockCard.hidden=!unlockedId;
+      if(unlockedId){
+        const nextCase=nextCases[unlockedId];
+        unlockCard.innerHTML=`<strong class="reward-heading">${isEnglish?'New Case Unlocked':'新案件已解锁'}</strong>${nextCase[isEnglish?'en':'zh']}`;
+      }
+    }
   }
 
   addEventListener('message',event=>{
     if(event.data?.type==='setLanguage') queueMicrotask(()=>syncCaseUI(event.data.lang));
+    if(event.data?.type==='caseContext'){
+      caseContext={...caseContext,...event.data};
+      if(event.data.lang&&event.data.lang!==activeLang){
+        localStorage.setItem('quietTownLang',event.data.lang);
+        window.postMessage({type:'setLanguage',lang:event.data.lang},'*');
+      }
+      queueMicrotask(()=>syncCaseUI(event.data.lang));
+    }
+    if(event.data?.type==='caseCompletionContext'){
+      completionContext={...completionContext,...event.data};
+      queueMicrotask(()=>syncCaseUI());
+    }
   });
   document.body.addEventListener('click',()=>setTimeout(()=>syncCaseUI(),0));
   syncCaseUI();
