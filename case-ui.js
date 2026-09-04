@@ -117,6 +117,18 @@
   if(!caseId) return;
 
   let activeLang=localStorage.getItem('quietTownLang')||'zh';
+  let analyticsAttemptCount=0;
+  let analyticsCompleteSent=false;
+  window.quietTownAnalytics={
+    capture(eventName,properties={}){
+      if(parent===window) return;
+      parent.postMessage({
+        type:'analytics',
+        eventName,
+        properties:{game_id:'quiet-town',case_id:caseId,language:activeLang,...properties}
+      },location.origin);
+    }
+  };
   let caseContext={caseId,canPrevious:false,canNext:false};
   let completionContext={newlyUnlockedCaseId:null};
 
@@ -231,6 +243,25 @@
     if(event.key==='Escape'){
       topActions.classList.remove('menu-open');
       moreButton.setAttribute('aria-expanded','false');
+    }
+  });
+
+  document.addEventListener('click',event=>{
+    if(!event.target.closest('[data-evidence]')) return;
+    const selectedCount=document.querySelectorAll('.clue.selected').length;
+    window.quietTownAnalytics.capture('evidence_select',{selected_count:selectedCount});
+  });
+  document.addEventListener('submit',event=>{
+    if(!event.target.closest('.investigation')) return;
+    analyticsAttemptCount+=1;
+    const isCorrect=Boolean(document.querySelector('.case-complete')?.closest('dialog')?.open);
+    window.quietTownAnalytics.capture('conclusion_submit',{
+      is_correct:isCorrect,
+      attempt_number:analyticsAttemptCount
+    });
+    if(isCorrect&&!analyticsCompleteSent){
+      analyticsCompleteSent=true;
+      window.quietTownAnalytics.capture('case_complete',{attempt_count:analyticsAttemptCount});
     }
   });
 

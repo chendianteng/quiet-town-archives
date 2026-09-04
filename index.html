@@ -122,5 +122,116 @@ body.case-playing>header{display:none!important}
   syncPlayerChrome();
 })();
 </script>
+<script>
+(()=>{
+  'use strict';
+  const frame=document.getElementById('frame');
+  const allowedAnalytics={
+    evidence_select:{selected_count:'integer'},
+    conclusion_submit:{is_correct:'boolean',attempt_number:'positiveInteger'},
+    case_complete:{attempt_count:'positiveInteger'}
+  };
+  let play=null;
+
+  function capture(eventName,properties){
+    if(window.posthog?.capture) window.posthog.capture(eventName,properties);
+  }
+  function language(){
+    return uiLang==='en'?'en':'zh';
+  }
+  function activeMilliseconds(){
+    if(!play) return 0;
+    return play.accumulatedMs+(play.runningSince===null?0:performance.now()-play.runningSince);
+  }
+  function activeSeconds(){
+    return Math.max(0,Math.floor(activeMilliseconds()/1000));
+  }
+  function startPlay(caseId){
+    play={
+      caseId,
+      accumulatedMs:0,
+      runningSince:document.hidden?null:performance.now(),
+      completed:false,
+      completeEventCaptured:false,
+      exited:false
+    };
+    capture('case_open',{game_id:'quiet-town',case_id:caseId,language:language()});
+  }
+  function finishPlay(){
+    if(!play||play.exited) return;
+    if(play.runningSince!==null){
+      play.accumulatedMs+=performance.now()-play.runningSince;
+      play.runningSince=null;
+    }
+    play.exited=true;
+    capture('case_exit',{
+      game_id:'quiet-town',
+      case_id:play.caseId,
+      active_seconds:activeSeconds(),
+      completed:play.completed,
+      language:language()
+    });
+    play=null;
+  }
+  function validValue(type,value){
+    if(type==='boolean') return typeof value==='boolean';
+    if(type==='integer') return Number.isInteger(value)&&value>=0;
+    if(type==='positiveInteger') return Number.isInteger(value)&&value>0;
+    return false;
+  }
+  function acceptAnalyticsMessage(event){
+    if(event.origin!==window.location.origin||event.source!==frame.contentWindow) return;
+    const data=event.data;
+    if(!data||data.type!=='analytics'||!Object.hasOwn(allowedAnalytics,data.eventName)) return;
+    const properties=data.properties;
+    const fields=allowedAnalytics[data.eventName];
+    if(!properties||properties.game_id!=='quiet-town'||properties.case_id!==play?.caseId||properties.language!==language()) return;
+    const expectedKeys=['game_id','case_id','language',...Object.keys(fields)];
+    if(Object.keys(properties).length!==expectedKeys.length||Object.keys(properties).some(key=>!expectedKeys.includes(key))) return;
+    if(Object.entries(fields).some(([key,type])=>!validValue(type,properties[key]))) return;
+
+    const safeProperties={game_id:'quiet-town',case_id:play.caseId,language:language()};
+    for(const key of Object.keys(fields)) safeProperties[key]=properties[key];
+    if(data.eventName==='case_complete'){
+      if(play.completeEventCaptured) return;
+      play.completeEventCaptured=true;
+      play.completed=true;
+      safeProperties.active_seconds=activeSeconds();
+    }
+    capture(data.eventName,safeProperties);
+  }
+
+  addEventListener('message',event=>{
+    acceptAnalyticsMessage(event);
+    if(event.origin!==window.location.origin||event.source!==frame.contentWindow) return;
+    if(event.data?.type==='caseComplete'&&Number(event.data.caseId)===play?.caseId) play.completed=true;
+  });
+  document.addEventListener('visibilitychange',()=>{
+    if(!play) return;
+    if(document.hidden&&play.runningSince!==null){
+      play.accumulatedMs+=performance.now()-play.runningSince;
+      play.runningSince=null;
+    }else if(!document.hidden&&play.runningSince===null){
+      play.runningSince=performance.now();
+    }
+  });
+
+  const originalOpenCase=openCase;
+  openCase=function(caseId){
+    caseId=Number(caseId);
+    if(!unlocked(caseId)) return;
+    finishPlay();
+    originalOpenCase(caseId);
+    startPlay(caseId);
+  };
+  const originalHome=home;
+  home=function(){
+    finishPlay();
+    originalHome();
+  };
+  addEventListener('pagehide',finishPlay);
+  capture('home_view',{game_id:'quiet-town',language:language()});
+})();
+</script>
 </body>
 </html>
