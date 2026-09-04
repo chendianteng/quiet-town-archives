@@ -193,7 +193,7 @@
   const moreButton=makeButton('caseMore','case-more','•••');
   moreButton.setAttribute('aria-controls','caseMenuPanel');
   moreButton.setAttribute('aria-expanded','false');
-  topActions.replaceChildren(menuPanel,languageButton,homeButton,moreButton);
+  topActions.replaceChildren(menuPanel,homeButton,languageButton,moreButton);
 
   function sendParent(type){
     if(parent===window){
